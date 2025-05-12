@@ -8,6 +8,8 @@ from datetime import datetime
 from campground_scraper.models.campground import Campground
 from src.campground_scraper.logging import get_logger
 from campground_scraper.scraper.client import TheDyrtClient
+from campground_scraper.settings import NORTH_BOUNDARY, SOUTH_BOUNDARY, EAST_BOUNDARY, WEST_BOUNDARY
+from campground_scraper.settings import CONCURRENCY_LIMIT, GRID_SIZE, BATCH_SIZE
 
 logger = get_logger(__name__)
 
@@ -17,19 +19,12 @@ class Scraper:
     Uses a grid-based approach to ensure complete coverage
     """
 
-    US_BOUNDARIES = {
-        "NORTH": 49.5,   
-        "SOUTH": 24.5,  
-        "EAST": -66.0,  
-        "WEST": -125.0,
-    }
-
     def __init__(
         self,
-        concurrency_limit: int = 3,
+        concurrency_limit: int = CONCURRENCY_LIMIT,
         pages_per_cell: int = 2,        # Get first 2 pages per cell for better coverage
-        grid_size: float = 1.0,         # 1 degree grid cells (smaller than default)
-        save_interval: int = 100        # Save to DB every 100 campgrounds
+        grid_size: float = GRID_SIZE,   # Use grid size from settings
+        save_interval: int = BATCH_SIZE # Use batch size from settings for save interval
     ):
         self.concurrency_limit = concurrency_limit
         self.pages_per_cell = pages_per_cell
@@ -38,6 +33,13 @@ class Scraper:
         self.client = TheDyrtClient(semaphore_limit=concurrency_limit)
         self.total_campgrounds_found = 0
         self.start_time = datetime.now()
+        
+        self.US_BOUNDARIES = {
+            "NORTH": NORTH_BOUNDARY,
+            "SOUTH": SOUTH_BOUNDARY,
+            "EAST": EAST_BOUNDARY,
+            "WEST": WEST_BOUNDARY,
+        }
 
     def generate_us_grid_cells(self) -> List[Tuple[float, float, float, float]]:
         """
@@ -166,7 +168,7 @@ class Scraper:
             async with semaphore:
                 return await self.process_grid_cell(cell, seen_ids)
 
-        batch_size = 20
+        batch_size = BATCH_SIZE
         campgrounds_since_last_save = []
         
         for i in range(0, len(grid_cells), batch_size):

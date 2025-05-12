@@ -10,6 +10,7 @@ from campground_scraper.scraper.scraper import Scraper
 from campground_scraper.db.session import get_async_session, get_session, close_session
 from campground_scraper.db.operations import DBOperations
 from src.campground_scraper.logging import get_logger
+from campground_scraper.settings import CONCURRENCY_LIMIT, GRID_SIZE, BATCH_SIZE
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -61,23 +62,25 @@ async def _scraper_task():
     new_campgrounds = 0
     updated_campgrounds = 0
     error_message = None
-        
-    session = await get_session()
-    db_ops = DBOperations(session)
+    regions_count = 0
+    
+    session = None
     
     try:
         logger.info("Starting US campground scraper job")
         
+        session = await get_session()
+        db_ops = DBOperations(session)
+        
         scraper = Scraper(
-            concurrency_limit=3,
+            concurrency_limit=CONCURRENCY_LIMIT,
             pages_per_cell=2,
-            grid_size=1.0
+            grid_size=GRID_SIZE
         )
         
         stats = await scraper.run(db_ops=db_ops)
         
         total_campgrounds = stats["total_campgrounds"]
-        
         regions_count = stats.get("regions_covered", 0)
         
         min_lat = scraper.US_BOUNDARIES["SOUTH"]  
@@ -97,19 +100,32 @@ async def _scraper_task():
         duration = time.time() - start_time
         
         try:
-            await db_ops.save_stats(
-                total=total_campgrounds,
-                new=new_campgrounds,
-                updated=updated_campgrounds,
-                duration=duration,
-                regions_count=regions_count,
-                min_latitude=min_lat,
-                max_latitude=max_lat,
-                min_longitude=min_lon,
-                max_longitude=max_lon,
-                error_message=error_message
-            )
+            if session:
+                await db_ops.save_stats(
+                    total=total_campgrounds,
+                    new=new_campgrounds,
+                    updated=updated_campgrounds,
+                    duration=duration,
+                    regions_count=regions_count,
+                    min_latitude=min_lat,
+                    max_latitude=max_lat,
+                    min_longitude=min_lon,
+                    max_longitude=max_lon,
+                    error_message=error_message
+                )
+                
+                await close_session(session)
         except Exception as e:
             logger.error(f"Error saving scraper stats: {e}")
-        
-        await close_session(session)
+            if session:
+                await close_session(session)
+                
+        scraper_status["running"] = False
+        scraper_status["last_run"] = datetime.now().isoformat()
+        scraper_status["last_run_stats"] = {
+            "total": total_campgrounds,
+            "new": new_campgrounds,
+            "updated": updated_campgrounds,
+            "duration": duration,
+            "error": error_message
+        }
