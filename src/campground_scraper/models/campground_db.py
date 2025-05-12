@@ -11,7 +11,7 @@ class CampgroundTable(Base):
     
     id = Column(String, primary_key=True, index=True)
     type = Column(String)
-    links = Column(JSONB)
+    # links = Column(JSONB)
     name = Column(String)
     latitude = Column(Float)
     longitude = Column(Float)
