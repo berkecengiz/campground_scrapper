@@ -60,22 +60,18 @@ class DBOperations:
             return {"new": 0, "updated": 0}
             
         try:
-            # Convert Pydantic models to dicts compatible with SQLAlchemy
             campground_dicts = []
             for camp in campgrounds:
                 camp_dict = self._convert_pydantic_to_db_dict(camp)
                 if camp_dict:
                     campground_dicts.append(camp_dict)
             
-            # Get existing campground IDs
             ids = [camp['id'] for camp in campground_dicts]
             
-            # Query existing IDs
             stmt = select(CampgroundTable.id).where(CampgroundTable.id.in_(ids))
             result = await self.session.execute(stmt)
             existing_ids = set(row[0] for row in result)
             
-            # Split into new and updated records
             new_records = []
             update_records = []
             
@@ -85,13 +81,11 @@ class DBOperations:
                 else:
                     new_records.append(camp_dict)
             
-            # Process inserts
             if new_records:
                 for record in new_records:
                     campground = CampgroundTable(**record)
                     self.session.add(campground)
             
-            # Process updates (must be one by one in async mode)
             if update_records:
                 for record in update_records:
                     stmt = select(CampgroundTable).where(CampgroundTable.id == record["id"])
@@ -128,17 +122,15 @@ class DBOperations:
                 camp_dict = campground.dict(exclude_unset=True)
             else:
                 camp_dict = campground.model_dump(exclude_unset=True)
-                
-            # Convert region-name (kebab case) to region_name (snake case)
+            
             if 'region-name' in camp_dict:
                 camp_dict['region_name'] = camp_dict.pop('region-name')
                 
-            # Remove fields not in our SQLAlchemy model
             fields_to_remove = [
-                'links',  # Nested object
-                'photo_urls',  # List of URLs
-                'photos_count',  # Not in our database model
-                'accommodation_type_names',  # Already converted to accommodation_types
+                'links',
+                'photo_urls',  
+                'photos_count',
+                'accommodation_type_names', 
             ]
             
             for field in fields_to_remove:

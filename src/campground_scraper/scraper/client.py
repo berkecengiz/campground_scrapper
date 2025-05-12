@@ -105,13 +105,12 @@ class TheDyrtClient:
             return {}
             
         try:
-            # Initialize the campground data
             campground_data = {
                 "id": camp.get("id", ""),
                 "type": camp.get("type", ""),
                 "links": camp.get("links", {"self": ""})
             }
-            # Add attributes
+
             attributes = camp.get("attributes", {})
             if not attributes:
                 logger.warning(f"Campground {camp.get('id', 'unknown')} has no attributes")
@@ -119,7 +118,6 @@ class TheDyrtClient:
                 
             campground_data.update(attributes)
             
-            # Make sure required fields are present
             if "name" not in campground_data or not campground_data["name"]:
                 logger.warning(f"Campground missing required 'name' field: {camp.get('id', 'unknown')}")
                 return {}
@@ -159,7 +157,6 @@ class TheDyrtClient:
                 "links": details.get("links", {"self": ""})
             }
             
-            # Add attributes
             if "attributes" in details and isinstance(details["attributes"], dict):
                 processed_details.update(details["attributes"])
                 

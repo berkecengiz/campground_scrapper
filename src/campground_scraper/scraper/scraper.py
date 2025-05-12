@@ -246,10 +246,6 @@ class Scraper:
     async def run(self, db_ops=None, output_file: str = None):
         """
         Run the scraper with database support.
-        
-        Args:
-            db_ops: Database operations object for saving to database
-            output_file: Optional file path to save JSON data
         """
         logger.info("Starting TheDyrt campground scraper for all US locations")
         
