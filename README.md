@@ -72,7 +72,7 @@ campground_scraper/
 │   ├── scraper.py         # Main scraper logic
 │   └── client.py          # TheDyrt API client
 ├── settings.py            # Configuration settings
-├── logging_config.py      # Logging configuration
+├── logging.py      # Logging configuration
 └── main.py                # Application entry point
 ```
 

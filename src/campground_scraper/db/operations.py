@@ -129,13 +129,6 @@ class DBOperations:
             else:
                 camp_dict = campground.model_dump(exclude_unset=True)
                 
-            # Handle list fields
-            if 'accommodation_type_names' in camp_dict and camp_dict['accommodation_type_names']:
-                camp_dict['accommodation_types'] = ','.join(camp_dict['accommodation_type_names'])
-                
-            if 'camper_types' in camp_dict and camp_dict['camper_types']:
-                camp_dict['camper_types'] = ','.join(camp_dict['camper_types'])
-                
             # Convert region-name (kebab case) to region_name (snake case)
             if 'region-name' in camp_dict:
                 camp_dict['region_name'] = camp_dict.pop('region-name')

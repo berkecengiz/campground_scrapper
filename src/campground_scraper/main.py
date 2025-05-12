@@ -1,48 +1,75 @@
+import sys
+import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
 
 from campground_scraper.api.routes import scraper
 from campground_scraper.db.session import create_tables
-from campground_scraper.logging_config import get_logger
+from campground_scraper.logging import get_logger
+from campground_scraper.scraper.scraper import Scraper
+from campground_scraper.db.operations import DBOperations
+from campground_scraper.db.session import create_tables, get_session, close_session
 
 logger = get_logger(__name__)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Initialize and cleanup tasks for the application.
-    """
-    # Startup: Create database tables if they don't exist
-    logger.info("Creating database tables if they don't exist")
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI application."""
+    app = FastAPI(
+        title="Campground Scraper API",
+        description="API to control and monitor campground scraping jobs.",
+        version="1.0.0"
+    )
+    
+    # Add CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    # Include API routes
+    app.include_router(scraper.router, prefix="/api/scraper", tags=["scraper"])
+    
+    @app.get("/")
+    async def root():
+        """Health check endpoint."""
+        return {"status": "ok", "service": "campground-scraper"}
+        
+    return app
+
+async def run_scraper():
+    """Run the scraper directly."""
+    logger.info("Starting scraper")
     await create_tables()
     
-    yield
+    session = await get_session()
+    db_ops = DBOperations(session)
     
-    # Shutdown: Cleanup tasks
-    logger.info("Shutting down application")
+    try:
+        scraper = Scraper()
+        stats = await scraper.run(db_ops=db_ops)
+        logger.info(f"Scraper completed: {stats}")
+    finally:
+        await close_session(session)
 
-app = FastAPI(lifespan=lifespan)
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Include API routes
-app.include_router(scraper.router, prefix="/api/scraper", tags=["scraper"])
-
-@app.get("/")
-async def root():
-    """Health check endpoint."""
-    return {"status": "ok", "service": "campground-scraper"}
-
-# Add this section to start the server when running the file directly
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Starting uvicorn server...")
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    
+    if len(sys.argv) > 1:
+        command = sys.argv[1]
+        
+        if command == "scrape":
+            asyncio.run(run_scraper())
+        elif command == "api":
+            app = create_app()
+            logger.info("Starting API server...")
+            uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+        else:
+            logger.error(f"Unknown command: {command}")
+            sys.exit(1)
+    else:
+        app = create_app()
+        logger.info("Starting API server (default)...")
+        uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 
 from campground_scraper.models.campground import Campground
-from campground_scraper.logging_config import get_logger
+from src.campground_scraper.logging import get_logger
 from campground_scraper.scraper.client import TheDyrtClient
 
 logger = get_logger(__name__)
@@ -17,26 +17,11 @@ class Scraper:
     Uses a grid-based approach to ensure complete coverage
     """
 
-    # US continental boundaries plus Alaska and Hawaii
     US_BOUNDARIES = {
-        "CONTINENTAL": {
-            "NORTH": 49.5,   # Northern border with Canada
-            "SOUTH": 24.5,   # Southern tip of Florida
-            "EAST": -66.0,   # Eastern Maine
-            "WEST": -125.0,  # Western coast
-        },
-        "ALASKA": {
-            "NORTH": 71.5,
-            "SOUTH": 51.0,
-            "EAST": -130.0,
-            "WEST": -170.0,
-        },
-        "HAWAII": {
-            "NORTH": 22.5,
-            "SOUTH": 18.5,
-            "EAST": -154.5,
-            "WEST": -160.5,
-        }
+        "NORTH": 49.5,   
+        "SOUTH": 24.5,  
+        "EAST": -66.0,  
+        "WEST": -125.0,
     }
 
     def __init__(
@@ -56,23 +41,17 @@ class Scraper:
 
     def generate_us_grid_cells(self) -> List[Tuple[float, float, float, float]]:
         """
-        Generate grid cells covering the entire United States.
-        Includes Continental US, Alaska, and Hawaii.
+        Generate grid cells covering the Continental United States.
         """
-        grid_cells = []
+        grid_cells = self._generate_cells_for_region(
+            self.US_BOUNDARIES["NORTH"], 
+            self.US_BOUNDARIES["SOUTH"], 
+            self.US_BOUNDARIES["EAST"], 
+            self.US_BOUNDARIES["WEST"],
+            "Continental US"
+        )
 
-        # Generate cells for each US region
-        for region_name, boundaries in self.US_BOUNDARIES.items():
-            cells = self._generate_cells_for_region(
-                boundaries["NORTH"], 
-                boundaries["SOUTH"], 
-                boundaries["EAST"], 
-                boundaries["WEST"],
-                region_name
-            )
-            grid_cells.extend(cells)
-
-        logger.info(f"Generated {len(grid_cells)} grid cells for US regions")
+        logger.info(f"Generated {len(grid_cells)} grid cells for Continental US")
         return grid_cells
 
     def _generate_cells_for_region(
@@ -104,7 +83,6 @@ class Scraper:
             return None
             
         try:
-            # Try to create the Campground instance with Pydantic validation
             campground = Campground(**camp_data)
             return campground
         except Exception as e:
@@ -122,7 +100,6 @@ class Scraper:
         try:
             logger.debug(f"Fetching campgrounds for cell N:{north:.2f} S:{south:.2f} E:{east:.2f} W:{west:.2f}")
             
-            # Fetch multiple pages per cell
             campgrounds_data = []
             for page in range(1, self.pages_per_cell + 1):
                 page_data = await self.client.fetch_campgrounds_by_bounds(
@@ -183,14 +160,12 @@ class Scraper:
         grid_cells = self.generate_us_grid_cells()
         logger.info(f"Starting to process {len(grid_cells)} grid cells across the US")
         
-        # Process cells with controlled concurrency
         semaphore = asyncio.Semaphore(self.concurrency_limit)
         
         async def process_with_semaphore(cell):
             async with semaphore:
                 return await self.process_grid_cell(cell, seen_ids)
-        
-        # Process cells in batches to control memory usage
+
         batch_size = 20
         campgrounds_since_last_save = []
         
@@ -201,7 +176,6 @@ class Scraper:
             batch_results = await tqdm.gather(*tasks, 
                 desc=f"Batch {i//batch_size + 1}/{(len(grid_cells) + batch_size - 1) // batch_size}")
             
-            # Collect new campgrounds
             batch_campgrounds = []
             for campground_list in batch_results:
                 if campground_list:
@@ -210,7 +184,6 @@ class Scraper:
             all_campgrounds.extend(batch_campgrounds)
             campgrounds_since_last_save.extend(batch_campgrounds)
             
-            # Log progress
             elapsed = (datetime.now() - self.start_time).total_seconds() / 60
             logger.info(f"Completed batch {i//batch_size + 1}/{(len(grid_cells) + batch_size - 1) // batch_size}. "
                        f"Total campgrounds: {self.total_campgrounds_found} "
@@ -228,7 +201,6 @@ class Scraper:
             # Small delay between batches
             await asyncio.sleep(1)
 
-        # Final save of any remaining campgrounds
         if save_callback and campgrounds_since_last_save:
             try:
                 await save_callback(campgrounds_since_last_save)
@@ -248,17 +220,14 @@ class Scraper:
             return
             
         try:
-            # Convert campgrounds to dictionaries
             campground_dicts = []
             for camp in campgrounds:
                 try:
-                    # Use model_dump() if available (Pydantic v2) or dict() (Pydantic v1)
                     if hasattr(camp, 'model_dump'):
                         camp_dict = camp.model_dump()
                     else:
                         camp_dict = camp.dict()
                     
-                    # Handle datetime objects
                     if 'availability_updated_at' in camp_dict and camp_dict['availability_updated_at']:
                         camp_dict['availability_updated_at'] = camp_dict['availability_updated_at'].isoformat()
                         
@@ -266,7 +235,6 @@ class Scraper:
                 except Exception as e:
                     logger.error(f"Error converting campground to dict: {e}")
             
-            # Write to file
             with open(filename, 'w', encoding='utf-8') as f:
                 json.dump(campground_dicts, f, indent=2)
                 
@@ -285,7 +253,6 @@ class Scraper:
         """
         logger.info("Starting TheDyrt campground scraper for all US locations")
         
-        # Define incremental save callback if db_ops provided
         save_callback = None
         if db_ops:
             async def save_to_db(campgrounds):
@@ -293,16 +260,13 @@ class Scraper:
                 return result
             save_callback = save_to_db
         
-        # Scan the map with incremental saving
         campgrounds = await self.scan_map(save_callback=save_callback)
         
-        # Save final results to file if requested
         if output_file:
             await self.save_campgrounds(campgrounds, output_file)
         
-        # Return statistics
         return {
             "total_campgrounds": self.total_campgrounds_found,
             "elapsed_minutes": (datetime.now() - self.start_time).total_seconds() / 60,
-            "regions_covered": len(self.US_BOUNDARIES)
+            "regions_covered": 1
         }

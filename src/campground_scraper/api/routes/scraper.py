@@ -9,7 +9,7 @@ from typing import Dict, Any
 from campground_scraper.scraper.scraper import Scraper
 from campground_scraper.db.session import get_async_session, get_session, close_session
 from campground_scraper.db.operations import DBOperations
-from campground_scraper.logging_config import get_logger
+from src.campground_scraper.logging import get_logger
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -61,10 +61,7 @@ async def _scraper_task():
     new_campgrounds = 0
     updated_campgrounds = 0
     error_message = None
-    min_lat, max_lat = 90, -90
-    min_lon, max_lon = 180, -180
-    regions = set()
-    
+        
     session = await get_session()
     db_ops = DBOperations(session)
     
@@ -81,6 +78,17 @@ async def _scraper_task():
         
         total_campgrounds = stats["total_campgrounds"]
         
+        regions_count = stats.get("regions_covered", 0)
+        
+        min_lat = scraper.US_BOUNDARIES["SOUTH"]  
+        max_lat = scraper.US_BOUNDARIES["NORTH"]
+        min_lon = scraper.US_BOUNDARIES["WEST"]
+        max_lon = scraper.US_BOUNDARIES["EAST"]
+
+        if hasattr(db_ops, "last_operation_stats"):
+            new_campgrounds = db_ops.last_operation_stats.get("new", 0)
+            updated_campgrounds = db_ops.last_operation_stats.get("updated", 0)
+        
     except Exception as e:
         logger.error(f"Error in scraper job: {e}")
         error_message = str(e)
@@ -88,33 +96,20 @@ async def _scraper_task():
     finally:
         duration = time.time() - start_time
         
-        # Save scraper stats
         try:
             await db_ops.save_stats(
                 total=total_campgrounds,
                 new=new_campgrounds,
                 updated=updated_campgrounds,
                 duration=duration,
-                regions_count=len(regions),
-                min_latitude=min_lat if min_lat != 90 else 0,
-                max_latitude=max_lat if max_lat != -90 else 0,
-                min_longitude=min_lon if min_lon != 180 else 0,
-                max_longitude=max_lon if max_lon != -180 else 0,
+                regions_count=regions_count,
+                min_latitude=min_lat,
+                max_latitude=max_lat,
+                min_longitude=min_lon,
+                max_longitude=max_lon,
                 error_message=error_message
             )
         except Exception as e:
             logger.error(f"Error saving scraper stats: {e}")
         
         await close_session(session)
-    
-    scraper_status["running"] = False
-    scraper_status["last_run"] = datetime.now().isoformat()
-    scraper_status["last_run_stats"] = {
-        "total": total_campgrounds,
-        "new": new_campgrounds,
-        "updated": updated_campgrounds,
-        "duration_seconds": duration,
-        "error": error_message
-    }
-    
-    logger.info(f"Scraper job completed in {duration:.2f} seconds. Found: {total_campgrounds}, New: {new_campgrounds}, Updated: {updated_campgrounds}")
