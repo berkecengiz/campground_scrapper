@@ -13,7 +13,3 @@ app.include_router(scraper.router, prefix="/scraper", tags=["Scraper"])
 @app.get("/")
 async def root():
     return {"message": "Campground Scraper API is running."}
-
-@app.on_event("startup")
-async def startup_event():
-    create_tables()

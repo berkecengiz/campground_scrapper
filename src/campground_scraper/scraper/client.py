@@ -3,7 +3,7 @@ import httpx
 import json
 from typing import List, Dict, Any, Optional
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
-from campground_scraper.logging_config import get_logger
+from src.campground_scraper.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -72,7 +72,7 @@ class TheDyrtClient:
                         logger.error(f"Expected 'data' to be a list, got: {type(campgrounds)}")
                         return []
 
-                    # Process each campground to match our model structure
+                    # Process each campground to match model
                     processed_campgrounds = []
                     for camp in campgrounds:
                         processed_camp = self._process_campground(camp)
@@ -104,15 +104,14 @@ class TheDyrtClient:
             logger.error(f"Expected campground to be a dict, got: {type(camp)}")
             return {}
             
-        # Get the id, type and links at the root level
         try:
+            # Initialize the campground data
             campground_data = {
                 "id": camp.get("id", ""),
                 "type": camp.get("type", ""),
                 "links": camp.get("links", {"self": ""})
             }
-            
-            # Add all attribute fields to the root level
+            # Add attributes
             attributes = camp.get("attributes", {})
             if not attributes:
                 logger.warning(f"Campground {camp.get('id', 'unknown')} has no attributes")
@@ -129,20 +128,16 @@ class TheDyrtClient:
                 logger.warning(f"Campground missing coordinates: {camp.get('id', 'unknown')}")
                 return {}
                 
-            # Ensure region-name is present (required by model)
             if "region-name" not in campground_data or not campground_data["region-name"]:
                 logger.warning(f"Campground missing region-name: {camp.get('id', 'unknown')}")
                 return {}
                 
-            # Ensure photo-urls is a list
             if "photo-urls" in campground_data and not isinstance(campground_data["photo-urls"], list):
                 campground_data["photo-urls"] = []
                 
-            # Ensure camper-types is a list
             if "camper-types" in campground_data and not isinstance(campground_data["camper-types"], list):
                 campground_data["camper-types"] = []
                 
-            # Ensure accommodation-type-names is a list
             if "accommodation-type-names" in campground_data and not isinstance(campground_data["accommodation-type-names"], list):
                 campground_data["accommodation-type-names"] = []
                 
@@ -152,55 +147,12 @@ class TheDyrtClient:
             logger.error(f"Error processing campground data: {e}")
             return {}
 
-    @retry(
-        retry=retry_if_exception_type((httpx.HTTPError, httpx.ReadTimeout, httpx.ConnectError)),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=30)
-    )
-    async def get_campground_details(self, campground_id: str) -> Dict[str, Any]:
-        """
-        Fetch detailed information for a specific campground.
-        """
-        if not campground_id:
-            logger.error("No campground ID provided for details fetch")
-            return {}
-            
-        url = f"{self.details_endpoint}/{campground_id}"
-        
-        async with self.semaphore:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                try:
-                    response = await client.get(url, headers=self.headers)
-                    response.raise_for_status()
-                    
-                    data = response.json()
-                    if not isinstance(data, dict) or "data" not in data:
-                        logger.error(f"Unexpected details response format: {data}")
-                        return {}
-                        
-                    # Process and return the details data
-                    return self._process_campground_details(data["data"])
-                    
-                except httpx.HTTPStatusError as e:
-                    logger.error(f"HTTP error fetching campground details: {e}")
-                    if e.response.status_code == 404:
-                        logger.warning(f"Campground ID {campground_id} not found")
-                    elif e.response.status_code == 429:
-                        logger.warning(f"Rate limited while fetching campground details. Sleeping...")
-                        await asyncio.sleep(10)  # Wait 10 seconds on rate limit
-                    raise
-                    
-                except Exception as e:
-                    logger.error(f"Error fetching campground details: {e}")
-                    raise
-    
     def _process_campground_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         """Process the campground details response."""
         if not details or not isinstance(details, dict):
             return {}
             
         try:
-            # Start with the core fields
             processed_details = {
                 "id": details.get("id", ""),
                 "type": details.get("type", ""),

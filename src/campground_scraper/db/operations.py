@@ -6,7 +6,7 @@ from datetime import datetime
 
 from campground_scraper.models.campground import Campground
 from campground_scraper.models.campground_db import CampgroundTable, ScraperStats 
-from campground_scraper.logging_config import get_logger
+from src.campground_scraper.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -54,12 +54,6 @@ class DBOperations:
     async def save_campgrounds_bulk_async(self, campgrounds: List[Campground]) -> Dict[str, int]:
         """
         Save campgrounds using efficient bulk operations with asyncio support.
-        
-        Args:
-            campgrounds: List of Campground Pydantic models
-            
-        Returns:
-            Dict with counts of new and updated campgrounds
         """
         if not campgrounds:
             logger.warning("No campgrounds to save")
