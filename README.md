@@ -1,11 +1,12 @@
 # Campground Scraper
 
-A comprehensive web scraping solution for extracting and managing campground data from TheDyrt.com across the United States.
+A web scraping solution for extracting and managing campground data from TheDyrt.com across the United States.
 
 ## Overview
 
-This project is designed to scrape, store, and manage campground data from TheDyrt.com, covering all campground locations across the Continental United States. It utilizes TheDyrt's search API to efficiently extract information while respecting rate limits.
+This project scrapes, stores, and manages campground data from TheDyrt.com, covering all campground locations across the continental United States. It utilizes TheDyrt's public search API to efficiently extract detailed campground information while respecting API rate limits.
 
+The backend is built with FastAPI and leverages async scraping for performance. Data is stored in a PostgreSQL database, with the system containerized using Docker for consistent deployment. The project also includes a REST API layer for querying and accessing stored campground data.
 ## Installation
 
 ### Using Docker (Recommended)
